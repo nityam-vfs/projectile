@@ -56,3 +56,42 @@ export function moveTaskInHierarchy<T extends HierarchyItem>(tasks: T[], taskId:
   walk(null);
   return result.length === tasks.length ? result : null;
 }
+
+/** Insert a task after the selected sibling, including the selected task's subtree. */
+export function insertTaskAfter<T extends HierarchyItem>(tasks: T[], newTask: T, selectedId: string | null): T[] | null {
+  if (tasks.some(task => task.id === newTask.id)) return null;
+  const ordered = [...tasks].sort((a, b) => a.sortOrder - b.sortOrder);
+  const byId = new Map(ordered.map(task => [task.id, { ...task }]));
+  const children = new Map<string | null, string[]>();
+  for (const task of ordered) {
+    if (task.parentId && !byId.has(task.parentId)) return null;
+    children.set(task.parentId, [...(children.get(task.parentId) ?? []), task.id]);
+  }
+  const inserted = { ...newTask };
+  const selected = selectedId ? byId.get(selectedId) : undefined;
+  inserted.parentId = selected?.parentId ?? null;
+  byId.set(inserted.id, inserted);
+  const siblings = children.get(inserted.parentId) ?? [];
+  if (selected) {
+    const index = siblings.indexOf(selected.id);
+    if (index < 0) return null;
+    siblings.splice(index + 1, 0, inserted.id);
+  } else {
+    siblings.push(inserted.id);
+  }
+  children.set(inserted.parentId, siblings);
+
+  const result: T[] = [];
+  const visiting = new Set<string>();
+  const walk = (parentId: string | null) => {
+    for (const id of children.get(parentId) ?? []) {
+      if (visiting.has(id)) return;
+      visiting.add(id);
+      const row = byId.get(id)!;
+      result.push({ ...row, sortOrder: result.length } as T);
+      walk(id);
+    }
+  };
+  walk(null);
+  return result.length === tasks.length + 1 ? result : null;
+}
